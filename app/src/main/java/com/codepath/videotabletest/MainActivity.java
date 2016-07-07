@@ -5,8 +5,12 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
 import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
 import android.view.View;
 import android.widget.Toast;
+
+import java.util.List;
+import java.util.Set;
 
 public class MainActivity extends AppCompatActivity {
     private static int RESULT_LOAD_VIDEO = 1;
@@ -19,18 +23,66 @@ public class MainActivity extends AppCompatActivity {
 
         //SAMPLE DATA TEST
 //        // Create sample data
-//        Video sampleVideo = new Video();
-//        sampleVideo.uri = "sup";
-//        //sampleVideo.profilePictureUrl = "https://i.imgur.com/tGbaZCY.jpg";
+        Video sampleVideo1 = new Video();
+        sampleVideo1.uri = "special1";
+
+        Video sampleVideo2 = new Video();
+        sampleVideo2.uri = "sup";
+
+        Video sampleVideo3 = new Video();
+        sampleVideo3.uri = "special2";
 //
-//        //VidTag sampleVidTag = new VidTag();
-//        //sampleVidTag.video = sampleVideo;
-//        //sampleVidTag.label = "Won won!";
-//        //sampleVidTag.time = 1;
-//
+        VidTag sampleVidTag1 = new VidTag();
+        sampleVidTag1.video = sampleVideo1;
+        sampleVidTag1.label = "One!";
+        sampleVidTag1.time = 1;
+
+        VidTag sampleVidTag2 = new VidTag();
+        sampleVidTag2.video = sampleVideo2;
+        sampleVidTag2.label = "Two!";
+        sampleVidTag2.time = 2;
+
+        VidTag sampleVidTag3 = new VidTag();
+        sampleVidTag3.video = sampleVideo3;
+        sampleVidTag3.label = "One!";
+        sampleVidTag3.time = 3;
+
+        VidTag sampleVidTag4 = new VidTag();
+        sampleVidTag4.video = sampleVideo1;
+        sampleVidTag4.label = "Four!!";
+        sampleVidTag4.time = 4;
+
 //        // Get singleton instance of database
-//        PostsDatabaseHelper databaseHelper = PostsDatabaseHelper.getInstance(this);
-//        databaseHelper.addOrUpdateVideo(sampleVideo);
+        VidTagsDatabaseHelper databaseHelper = VidTagsDatabaseHelper.getInstance(this);
+        databaseHelper.deleteAllVidTagsAndVideos();
+        databaseHelper.addOrUpdateVideo(sampleVideo1);
+        databaseHelper.addOrUpdateVideo(sampleVideo2);
+        databaseHelper.addOrUpdateVideo(sampleVideo3);
+        databaseHelper.addVidTag(sampleVidTag1);
+        databaseHelper.addVidTag(sampleVidTag2);
+        databaseHelper.addVidTag(sampleVidTag3);
+        databaseHelper.addVidTag(sampleVidTag4);
+        databaseHelper.deleteVideo(sampleVideo3);
+        Set<Video> results = databaseHelper.getSearchResults("One!");
+        Log.d("DEBUG", "size of results set: " + Integer.toString(results.size()));
+        for (Video video: results) {
+            Log.d("DEBUG", "video uri: " + video.uri);
+        }
+
+       Log.d("DEBUG", Integer.toString(databaseHelper.getVideoID(sampleVideo2.uri)));
+        List<VidTag> vidTags = databaseHelper.getAllVidTags();
+        for (int i = 0; i < vidTags.size(); i++) {
+            Log.d("DEBUG","vidTag labels: " + vidTags.get(i).label);
+
+       }
+        int id1 = databaseHelper.getVidTagId(sampleVidTag1);
+        Log.d("DEBUG", "vidtag1 id: " + Integer.toString(id1));
+        int id2 = databaseHelper.getVidTagId(sampleVidTag2);
+        Log.d("DEBUG", "vidtag2 id: " + Integer.toString(id2));
+        Log.d("DEBUG", "hi");
+
+        //Toast.makeText(this)
+        //databaseHelper.getVideo();
 //
 //        // Add sample post to the database
 //        //databaseHelper.addVidTag(sampleVidTag);

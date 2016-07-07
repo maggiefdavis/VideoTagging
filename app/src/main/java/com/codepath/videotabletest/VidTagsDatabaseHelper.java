@@ -10,8 +10,10 @@ import android.util.Log;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
-public class PostsDatabaseHelper extends SQLiteOpenHelper {
+public class VidTagsDatabaseHelper extends SQLiteOpenHelper {
     // Database Info
     private static final String DATABASE_NAME = "videosDatabase";
     private static final int DATABASE_VERSION = 1;
@@ -33,14 +35,14 @@ public class PostsDatabaseHelper extends SQLiteOpenHelper {
     private static final String KEY_VIDTAG_LABEL = "label";
     private static final String KEY_VIDTAG_TIME = "time";
 
-    private static PostsDatabaseHelper sInstance;
+    private static VidTagsDatabaseHelper sInstance;
 
-    public static synchronized PostsDatabaseHelper getInstance(Context context) {
+    public static synchronized VidTagsDatabaseHelper getInstance(Context context) {
         // Use the application context, which will ensure that you
         // don't accidentally leak an Activity's context.
         // See this article for more information: http://bit.ly/6LRzfx
         if (sInstance == null) {
-            sInstance = new PostsDatabaseHelper(context.getApplicationContext());
+            sInstance = new VidTagsDatabaseHelper(context.getApplicationContext());
         }
         return sInstance;
     }
@@ -49,7 +51,7 @@ public class PostsDatabaseHelper extends SQLiteOpenHelper {
      * Constructor should be private to prevent direct instantiation.
      * Make a call to the static method "getInstance()" instead.
      */
-    private PostsDatabaseHelper(Context context) {
+    private VidTagsDatabaseHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
     }
 
@@ -97,7 +99,7 @@ public class PostsDatabaseHelper extends SQLiteOpenHelper {
         }
     }
 
-    // Insert a post into the database
+    // Insert a vidtag into the database
     public void addVidTag(VidTag vidTag) {
         // Create and/or open the database for writing
         SQLiteDatabase db = getWritableDatabase();
@@ -107,13 +109,12 @@ public class PostsDatabaseHelper extends SQLiteOpenHelper {
         db.beginTransaction();
         try {
             // The user might already exist in the database (i.e. the same user created multiple posts).
-            //long userId = addOrUpdateUser(post.user);
 
             long videoId = addOrUpdateVideo(vidTag.video);
 
             ContentValues values = new ContentValues();
             values.put(KEY_VIDTAG_VIDEO_ID_FK, videoId);
-            values.put(KEY_VIDTAG_LABEL, vidTag.label);
+            values.put(KEY_VIDTAG_LABEL, (vidTag.label).toLowerCase());
             values.put(KEY_VIDTAG_TIME, vidTag.time);
 
             // Notice how we haven't specified the primary key. SQLite auto increments the primary key column.
@@ -175,7 +176,121 @@ public class PostsDatabaseHelper extends SQLiteOpenHelper {
         return userId;
     }
 
-    // Get all vidtags in the database
+    //Takes in the uri of a video, returns the video id
+    public int getVideoID(String uri) {
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = null;
+        int id = 0;
+        try {
+
+            cursor = db.query(TABLE_VIDEOS, new String[]{KEY_VIDEO_ID, KEY_VIDEO_URI}, KEY_VIDEO_URI + "=?", new String[]{uri}, null, null, null);
+
+            if (cursor.getCount() > 0) {
+                cursor.moveToFirst();
+                id = cursor.getInt(cursor.getColumnIndex(KEY_VIDEO_ID));
+            }
+            return id;
+        } finally {
+            cursor.close();
+        }
+    }
+
+    //Takes in video id, returns full video object
+    public Video getVideo(int id) {
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = null;
+        String uriStr;
+        Video video = new Video();
+        try {
+
+            cursor = db.query(TABLE_VIDEOS, new String[]{KEY_VIDEO_ID, KEY_VIDEO_URI}, KEY_VIDEO_ID + "=?", new String[]{Integer.toString(id)}, null, null, null);
+
+            if (cursor.getCount() > 0) {
+                cursor.moveToFirst();
+                uriStr = cursor.getString(cursor.getColumnIndex(KEY_VIDEO_URI));
+                video.uri = uriStr;
+            }
+            return video;
+        } finally {
+            cursor.close();
+        }
+    }
+
+    //Takes in video, returns a list of all vidtags associated with that video
+    public List<VidTag> getAssociatedVidTags(Video video) {
+        List<VidTag> vidTags = new ArrayList<>();
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = null;
+        int id = getVideoID(video.uri);
+        if (id == 0) {
+            return vidTags;
+        }
+        try {
+
+            cursor = db.query(TABLE_VIDTAGS, new String[]{KEY_VIDTAG_ID, KEY_VIDTAG_VIDEO_ID_FK, KEY_VIDTAG_LABEL, KEY_VIDTAG_TIME}, KEY_VIDTAG_VIDEO_ID_FK + "=?", new String[]{Integer.toString(id)}, null, null, null);
+
+            if (cursor.moveToFirst()) {
+
+                do {
+                    VidTag vidTag = new VidTag();
+                    vidTag.video = video;
+                    vidTag.label = cursor.getString(cursor.getColumnIndex(KEY_VIDTAG_LABEL));
+                    vidTag.time = cursor.getInt(cursor.getColumnIndex(KEY_VIDTAG_TIME));
+                    vidTags.add(vidTag);
+                } while (cursor.moveToNext());
+            }
+            return vidTags;
+        } finally {
+            cursor.close();
+        }
+
+    }
+
+
+    //Takes in video, deletes all tags associated with that video
+    public boolean deleteAssociatedVidTags(Video video) {
+        int id = getVideoID(video.uri);
+        try {
+            //Open the database
+            SQLiteDatabase database = this.getWritableDatabase();
+            //Execute sql query to remove from database
+            //NOTE: When removing by String in SQL, value must be enclosed with ''
+            database.execSQL("DELETE FROM " + TABLE_VIDTAGS + " WHERE " + KEY_VIDTAG_VIDEO_ID_FK + "= '" + id + "'");
+            //Close the database
+            database.close();
+
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+
+    }
+
+    //Takes in string query, returns a set of videos which contain tags whose labels match the query
+    public Set<Video> getSearchResults(String query) {
+        Set<Video> videoResults = new TreeSet<>();
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = null;
+        try {
+
+            cursor = db.query(TABLE_VIDTAGS, new String[]{KEY_VIDTAG_ID, KEY_VIDTAG_VIDEO_ID_FK, KEY_VIDTAG_LABEL, KEY_VIDTAG_TIME}, KEY_VIDTAG_LABEL + "=?", new String[]{query.toLowerCase()}, null, null, null);
+
+            if (cursor.moveToFirst()) {
+                do {
+                    int videoId = cursor.getInt(cursor.getColumnIndex(KEY_VIDTAG_VIDEO_ID_FK));
+                    Video video = getVideo(videoId);
+                    videoResults.add(video);
+                } while (cursor.moveToNext());
+            }
+            return videoResults;
+        } finally {
+            cursor.close();
+        }
+
+
+    }
+
+    // Gets all vidtags in the database
     public List<VidTag> getAllVidTags() {
         List<VidTag> vidTags = new ArrayList<>();
 
@@ -203,7 +318,7 @@ public class PostsDatabaseHelper extends SQLiteOpenHelper {
                     newVidTag.time = cursor.getInt(cursor.getColumnIndex(KEY_VIDTAG_TIME));
                     newVidTag.video = newVideo;
                     vidTags.add(newVidTag);
-                } while(cursor.moveToNext());
+                } while (cursor.moveToNext());
             }
         } catch (Exception e) {
             Log.d(TAG, "Error while trying to get video tags from database");
@@ -215,54 +330,90 @@ public class PostsDatabaseHelper extends SQLiteOpenHelper {
         return vidTags;
     }
 
-    public boolean deleteVideo(Video video)
-    {
-//        SQLiteDatabase db = getReadableDatabase();
+    //Deletes video from the database, and deletes all tags associated with the video
+    public boolean deleteVideo(Video video) {
         String uri = video.uri;
-//        //return db.delete(TABLE_VIDEOS, KEY_VIDEO_URI + "='" + uri + "'", null) > 0;
-//        return db.delete(TABLE_VIDEOS, KEY_VIDEO_URI + "=?", new String[]{uri}) > 0;
-
+        deleteAssociatedVidTags(video);
         try {
-            SQLiteDatabase db = getReadableDatabase();
-            db.delete(TABLE_VIDEOS, "Uri="+uri, null);
+            //Open the database
+            SQLiteDatabase database = this.getWritableDatabase();
+            //Execute sql query to remove from database
+            //NOTE: When removing by String in SQL, value must be enclosed with ''
+            database.execSQL("DELETE FROM " + TABLE_VIDEOS + " WHERE " + KEY_VIDEO_URI + "= '" + uri + "'");
+            //Close the database
+            database.close();
+
+            return true;
+        } catch (Exception e) {
+            return false;
         }
-        catch(Exception e) {  }
-        return true;
+
     }
 
-    // Get all posts in the database
+    //Takes in vidtag, returns id for the tag
+    public int getVidTagId(VidTag vidTag) {
+        List<VidTag> vidTags = new ArrayList<>();
+        SQLiteDatabase db = this.getReadableDatabase();
+        int videoId = getVideoID((vidTag.video).uri);
+        int id = 0;
+        Cursor cursor = null;
+        try {
+
+            cursor = db.query(TABLE_VIDTAGS, new String[]{KEY_VIDTAG_ID, KEY_VIDTAG_VIDEO_ID_FK, KEY_VIDTAG_LABEL, KEY_VIDTAG_TIME}, KEY_VIDTAG_VIDEO_ID_FK + "=?", new String[]{Integer.toString(videoId)}, null, null, null);
+
+            if (cursor.moveToFirst()) {
+
+                do {
+                    if (vidTag.label.equals(cursor.getString(cursor.getColumnIndex(KEY_VIDTAG_LABEL)))
+                            && vidTag.time == cursor.getInt(cursor.getColumnIndex(KEY_VIDTAG_TIME))) {
+                        id = cursor.getInt(cursor.getColumnIndex(KEY_VIDTAG_ID));
+                    }
+                } while (cursor.moveToNext());
+            }
+        } finally {
+            cursor.close();
+        }
+        return id;
+    }
+
+    //Deletes a vidtag
+    public boolean deleteVidTag(VidTag vidTag) {
+        int id = getVidTagId(vidTag);
+        if (id == 0) { return false; }
+        try {
+            //Open the database
+            SQLiteDatabase database = this.getWritableDatabase();
+            //Execute sql query to remove from database
+            //NOTE: When removing by String in SQL, value must be enclosed with ''
+            database.execSQL("DELETE FROM " + TABLE_VIDTAGS + " WHERE " + KEY_VIDTAG_ID + "= '" + id + "'");
+            //Close the database
+            database.close();
+
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+
+    }
+
+    // Gets all videos in the database
     public List<Video> getAllVideos() {
         List<Video> videos = new ArrayList<>();
 
         // SELECT * FROM POSTS
         // LEFT OUTER JOIN USERS
         // ON POSTS.KEY_POST_USER_ID_FK = USERS.KEY_USER_ID
-//        String POSTS_SELECT_QUERY =
-//
-//
-//
-//                String.format("SELECT * FROM %s LEFT OUTER JOIN %s ON %s.%s = %s.%s",
-//                        TABLE_VIDTAGS,
-//                        TABLE_VIDEOS,
-//                        TABLE_VIDTAGS, KEY_VIDTAG_VIDEO_ID_FK,
-//                        TABLE_VIDEOS, KEY_VIDEO_ID);
-
         // "getReadableDatabase()" and "getWriteableDatabase()" return the same object (except under low
         // disk space scenarios)
         SQLiteDatabase db = getReadableDatabase();
-        Cursor cursor = db.rawQuery("SELECT * FROM "+ TABLE_VIDEOS, null);
+        Cursor cursor = db.rawQuery("SELECT * FROM " + TABLE_VIDEOS, null);
         try {
             if (cursor.moveToFirst()) {
                 do {
                     Video newVideo = new Video();
                     newVideo.uri = cursor.getString(cursor.getColumnIndex(KEY_VIDEO_URI));
-                    //VidTag newVidTag = new VidTag();
-                    //newVidTag.label = cursor.getString(cursor.getColumnIndex(KEY_VIDTAG_LABEL));
-                    //newVidTag.time = cursor.getInt(cursor.getColumnIndex(KEY_VIDTAG_TIME));
-                    //newVidTag.video = newVideo;
-                    //vidTags.add(newVidTag);
                     videos.add(newVideo);
-                } while(cursor.moveToNext());
+                } while (cursor.moveToNext());
             }
         } catch (Exception e) {
             Log.d(TAG, "Error while trying to get videos from database");
@@ -274,6 +425,7 @@ public class PostsDatabaseHelper extends SQLiteOpenHelper {
         return videos;
     }
 
+    //TODO: add update methods so users can edit vidtags
 //    // Update the video's uri
 //    public int updateUserProfilePicture(User user) {
 //        SQLiteDatabase db = this.getWritableDatabase();
@@ -286,7 +438,7 @@ public class PostsDatabaseHelper extends SQLiteOpenHelper {
 //                new String[] { String.valueOf(user.userName) });
 //    }
 
-    // Delete all posts and users in the database
+    // Delete all videos and vidtags in the database
     public void deleteAllVidTagsAndVideos() {
         SQLiteDatabase db = getWritableDatabase();
         db.beginTransaction();
